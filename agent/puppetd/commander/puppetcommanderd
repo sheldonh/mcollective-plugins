@@ -132,8 +132,6 @@ end
 #
 # TODO: Add exception handling.
 def run(interval, concurrency)
-    @puppet.reset
-
     log("Doing discovery start of run")
     Timeout::timeout(5) {
         @clients = @puppet.discover :verbose => false
@@ -182,23 +180,36 @@ def run(interval, concurrency)
     end
 end
 
-@puppet = rpcclient("puppetd", :options => @options)
-@puppet.progress = false
+def connect
+    @puppet = rpcclient("puppetd", :options => @options)
+    @puppet.progress = false
 
-# do some naive parsing of the filter, this is pretty poor and should be set using
-# the new in 1.1.0 MCOLLECTIVE_EXTRA_OPTS setting
-if @puppet.options[:filter]["fact"] == [] || @puppet.options[:filter]["cf_class"] == []
-    @config[:filter].split(" ").each do |f|
-        if f =~ /^(.+?)=(.+)/
-            @puppet.fact_filter $1, $2
-        else
-            @puppet.class_filter f
+    # do some naive parsing of the filter, this is pretty poor and should be set using
+    # the new in 1.1.0 MCOLLECTIVE_EXTRA_OPTS setting
+    if @puppet.options[:filter]["fact"] == [] || @puppet.options[:filter]["cf_class"] == []
+        @config[:filter].split(" ").each do |f|
+            if f =~ /^(.+?)=(.+)/
+                @puppet.fact_filter $1, $2
+            else
+                @puppet.class_filter f
+            end
         end
+    end
+end
+
+def disconnect
+    begin
+        @puppet.disconnect if @puppet
+    rescue Exception
+        # We were just being polite anyway, don't bother logging.
+    ensure
+        @puppet = nil
     end
 end
 
 # starts the worker loop in the foreground
 def foreground
+    connect
     loop do
       run(@config[:interval], @config[:concurrency])
     end
@@ -221,6 +232,7 @@ def background
 
         loop do
             begin
+                connect
                 log("Starting run: interval: #{@config[:interval]} concurrency: #{@config[:concurrency]}")
                 run(@config[:interval], @config[:concurrency])
                 log("Run ended, restarting")
@@ -229,6 +241,8 @@ def background
                 log(e)
                 sleep 5
                 retry
+            ensure
+                disconnect
             end
         end
     end
