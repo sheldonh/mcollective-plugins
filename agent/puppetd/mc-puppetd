@@ -112,19 +112,24 @@ elsif command == "runall"
             #  - log the output from the schedule command
             #  - sleep a second
             hosts.each do |host|
-                running = waitfor(concurrency, puppetd)
+                begin
+                    running = waitfor(concurrency, puppetd)
 
-                log("Running #{host}, concurrency is #{running}")
+                    log("Running #{host}, concurrency is #{running}")
 
-                result = puppetd.custom_request("runonce", {:forcerun => true}, host, {"identity" => host})
+                    result = puppetd.custom_request("runonce", {:forcerun => true}, host, {"identity" => host})
 
-                if result.is_a?(Array)
-                    log("#{host} schedule status: #{result[0][:statusmsg]}")
-                else
-                    log("#{host} unknown output: #{result.pretty_inspect}")
+                    if result.is_a?(Array) and result[0].is_a?(Hash)
+                        log("#{host} schedule status: #{result[0][:statusmsg]}")
+                    else
+                        log("#{host} unknown output: #{result.pretty_inspect}")
+                    end
+                rescue Exception => e
+                    log("#{host} exception: #{e.message}")
+                    log(e)
+                ensure
+                    sleep 1
                 end
-
-                sleep 1
             end
         else
             puts("Concurrency is #{concurrency}, not running any nodes")
