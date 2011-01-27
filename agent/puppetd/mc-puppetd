@@ -119,8 +119,8 @@ elsif command == "runall"
 
                     result = puppetd.custom_request("runonce", {:forcerun => true}, host, {"identity" => host})
 
-                    if result.is_a?(Array) and result[0].is_a?(Hash)
-                        log("#{host} schedule status: #{result[0][:statusmsg]}")
+                    if result.is_a?(Array) and !result.empty?
+                        log("#{host} schedule status: #{result.first[:statusmsg]}")
                     else
                         log("#{host} unknown output: #{result.pretty_inspect}")
                     end
