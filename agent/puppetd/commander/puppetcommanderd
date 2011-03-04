@@ -74,7 +74,7 @@ end
     end
 end
 
-@logger = Logger.new(@config[:logfile], 10, 1024000)
+@logger = Logger.new(@config[:logfile])
 
 def log(msg)
     @logger.add(Logger::INFO) { msg }
