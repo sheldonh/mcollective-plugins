@@ -36,19 +36,36 @@ module MCollective
 
                 require 'mongo'
 
-                @timeout = 2
-
                 @config = Config.instance
+
+                @timeout = @config.pluginconf["registration.timeout"].to_i || 2
 
                 @mongohost = @config.pluginconf["registration.mongohost"] || "localhost"
                 @mongodb = @config.pluginconf["registration.mongodb"] || "puppet"
+                @mongodb_port = @config.pluginconf["registration.mongodb_port"] || "27017"
                 @collection = @config.pluginconf["registration.collection"] || "nodes"
+                @mongodb_replset = @config.pluginconf["registration.replication_set"]
+                @mongodb_user = @config.pluginconf["registration.mongodb_user"]
+                @mongodb_password = @config.pluginconf["registration.mongodb_password"] || ""
 
-                Log.instance.debug("Connecting to mongodb @ #{@mongohost} db #{@mongodb} collection #{@collection}")
+                Log.instance.debug("Connecting to mongodb @ #{@mongohost} db #{@mongodb} collection #{@collection} port #{@mongodb_port}" )
 
-                @dbh = Mongo::Connection.new(@mongohost).db(@mongodb)
-                @coll = @dbh.collection(@collection)
+                if @mongodb_replset
+                    @hostlist = @mongohost.split(" ").collect { |host|
+                        if host =~ /:(\d+)$/
+                            [host, $1]
+                        else
+                            [host, @mongodb_port]
+                        end
+                    }
+                    Log.instance.debug("Connecting to #{@hostlist.inspect}")
+                    @db = Mongo::ReplSetConnection.new(*@hostlist).db(@mongodb)
+                else
+                    @db = Mongo::Connection.new(@mongohost).db(@mongodb)
+                end
 
+                @db.authenticate(@mongodb_user, @mongodb_password) if @mongodb_user
+                @coll = @db.collection(@collection)
                 @coll.create_index("fqdn", {:unique => true, :dropDups => true})
             end
 
