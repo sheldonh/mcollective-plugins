@@ -10,14 +10,17 @@ module MCollective
         #                        /var/lib/puppet/state/puppetdlock
         #    puppetd.puppetd   - Where to find the puppetd, defaults to
         #                        /usr/sbin/puppetd
+        #    puppetd.summary   - Where to find the summary file written by Puppet
+        #                        2.6.8 and newer
+        #    puppetd.pidfile   - Where to find the Puppet pid file
         class Puppetd<RPC::Agent
             metadata    :name        => "SimpleRPC Puppet Agent",
                         :description => "Agent to manage the puppet daemon",
                         :author      => "R.I.Pienaar",
                         :license     => "Apache License 2.0",
-                        :version     => "1.3",
-                        :url         => "http://mcollective-plugins.googlecode.com/",
-                        :timeout     => 20
+                        :version     => "1.4",
+                        :url         => "http://projects.puppetlabs.com/projects/mcollective-plugins/wiki",
+                        :timeout     => 30
 
             def startup_hook
                 @splaytime = @config.pluginconf["puppetd.splaytime"].to_i || 0
@@ -25,6 +28,11 @@ module MCollective
                 @statefile = @config.pluginconf["puppetd.statefile"] || "/var/lib/puppet/state/state.yaml"
                 @pidfile = @config.pluginconf["puppet.pidfile"] || "/var/run/puppet/agent.pid"
                 @puppetd = @config.pluginconf["puppetd.puppetd"] || "/usr/sbin/puppetd"
+                @last_summary = @config.pluginconf["puppet.summary"] || "/var/lib/puppet/state/last_run_summary.yaml"
+            end
+
+            action "last_run_summary" do
+                last_run_summary
             end
 
             action "enable" do
@@ -44,6 +52,16 @@ module MCollective
             end
 
             private
+            def last_run_summary
+                summary = YAML.load_file(@last_summary)
+
+                reply[:resources] = {"failed"=>0, "changed"=>0, "total"=>0, "restarted"=>0, "out_of_sync"=>0}.merge(summary["resources"])
+
+                ["time", "events", "changes"].each do |dat|
+                    reply[dat.to_sym] = summary[dat]
+                end
+            end
+
             def status
                 reply[:enabled] = 0
                 reply[:running] = 0
@@ -70,14 +88,20 @@ module MCollective
                 if File.exists?(@lockfile)
                     reply.fail "Lock file exists, puppetd is already running or it's disabled"
                 else
-                    if request[:forcerun]
-                        reply[:output] = %x[#{@puppetd} --onetime]
+                    cmd = [@puppetd, "--onetime"]
 
-                    elsif @splaytime > 0
-                        reply[:output] = %x[#{@puppetd} --onetime --splaylimit #{@splaytime} --splay]
+                    unless request[:forcerun]
+                        if @splaytime > 0
+                            cmd << "--splaylimit" << @splaytime << "--splay"
+                        end
+                    end
 
+                    cmd = cmd.join(" ")
+
+                    if respond_to?(:run)
+                        run(cmd, :stdout => :output, :chomp => true)
                     else
-                        reply[:output] = %x[#{@puppetd} --onetime]
+                        reply[:output] = %x[#{cmd}]
                     end
                 end
             end
@@ -109,7 +133,7 @@ module MCollective
 
                         reply[:output] = "Lock created"
                     rescue Exception => e
-                        reply[:output] = "Could not create lock: #{e}"
+                        reply.fail "Could not create lock: #{e}"
                     end
                 end
             end

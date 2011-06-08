@@ -4,9 +4,9 @@ module MCollective
             metadata    :name        => "SimpleRPC Agent For NRPE Commands",
                         :description => "Agent to query NRPE commands via MCollective",
                         :author      => "R.I.Pienaar",
-                        :license     => "Apache License 2.0",
-                        :version     => "1.2",
-                        :url         => "http://mcollective-plugins.googlecode.com/",
+                        :license     => "Apache 2",
+                        :version     => "1.3",
+                        :url         => "http://projects.puppetlabs.com/projects/mcollective-plugins/wiki",
                         :timeout     => 5
 
             action "runcommand" do
@@ -23,8 +23,12 @@ module MCollective
                     return
                 end
 
-                reply[:output] = %x[#{command[:cmd]}].chomp
-                reply[:exitcode] = $?.exitstatus
+                if respond_to?(:run)
+                    reply[:exitcode] = run(command[:cmd], :stdout => :output, :chomp => true)
+                else
+                    reply[:output] = %x[#{command[:cmd]}].chomp
+                    reply[:exitcode] = $?.exitstatus
+                end
 
                 case reply[:exitcode]
                     when 0
